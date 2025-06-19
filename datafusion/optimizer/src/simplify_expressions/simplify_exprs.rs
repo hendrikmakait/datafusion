@@ -492,7 +492,7 @@ mod tests {
 
         let actual = get_optimized_plan_formatted(plan, &time);
         let expected =
-            "Projection: NOT test.a AS Boolean(true) OR Boolean(false) != test.a\
+            "Projection: NOT test.a AS (Boolean(true) OR Boolean(false)) != test.a\
                         \n  TableScan: test";
 
         assert_eq!(expected, actual);

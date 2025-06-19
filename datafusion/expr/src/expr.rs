@@ -2722,7 +2722,32 @@ impl Display for SchemaDisplay<'_> {
                 }
             }
             Expr::BinaryExpr(BinaryExpr { left, op, right }) => {
-                write!(f, "{} {op} {}", SchemaDisplay(left), SchemaDisplay(right),)
+                fn write_child(
+                    f: &mut Formatter<'_>,
+                    expr: &Expr,
+                    precedence: u8,
+                ) -> fmt::Result {
+                    match expr {
+                        Expr::BinaryExpr(BinaryExpr { op, ..}) => {
+                            let p = op.precedence();
+                            if p == 0 || p <= precedence {
+                                write!(f, "({})", SchemaDisplay(expr))?;
+                            } else {
+                                write!(f, "{}", SchemaDisplay(expr))?;
+                            }
+                            Ok(())
+                        }
+                        _ => {
+                            write!(f, "{}", SchemaDisplay(expr))?;
+                            Ok(())
+                        }
+                    }
+                }
+
+                let precedence = op.precedence();
+                write_child(f, left.as_ref(), precedence)?;
+                write!(f, " {} ", op)?;
+                write_child(f, right.as_ref(), precedence)
             }
             Expr::Case(Case {
                 expr,
@@ -2826,7 +2851,16 @@ impl Display for SchemaDisplay<'_> {
 
                 Ok(())
             }
-            Expr::Negative(expr) => write!(f, "(- {})", SchemaDisplay(expr)),
+            Expr::Negative(expr) => {
+                match expr.as_ref() {
+                    Expr::Negative(_) | Expr::BinaryExpr(_) => {
+                        write!(f, "-({})", SchemaDisplay(expr))
+                    }
+                    _ => {
+                        write!(f, "-{}", SchemaDisplay(expr))
+                    }
+                }
+            }
             Expr::Not(expr) => write!(f, "NOT {}", SchemaDisplay(expr)),
             Expr::Unnest(Unnest { expr }) => {
                 write!(f, "UNNEST({})", SchemaDisplay(expr))
@@ -3817,6 +3851,33 @@ mod test {
                 SchemaDisplay(&lit(1).alias_qualified(None::<&str>, "column_name"))
             ),
             "column_name"
+        );
+    }
+
+    #[test]
+    fn test_schema_display_nested_binary_expr() {
+        let expr = lit(1) - (lit(2) + lit(3));
+        assert_eq!(
+            format!("{}", SchemaDisplay(&expr)),
+            "Int32(1) - (Int32(2) + Int32(3))"
+        );
+
+        let expr = lit(1) * (lit(2) + lit(3));
+        assert_eq!(
+            format!("{}", SchemaDisplay(&expr)),
+            "Int32(1) * (Int32(2) + Int32(3))"
+        );
+
+        let expr = lit(1) + lit(2) * lit(3);
+        assert_eq!(
+            format!("{}", SchemaDisplay(&expr)),
+            "Int32(1) + Int32(2) * Int32(3)"
+        );
+
+        let expr = -(lit(1) + (lit(2)));
+        assert_eq!(
+            format!("{}", SchemaDisplay(&expr)),
+            "-(Int32(1) + Int32(2))"
         );
     }
 
